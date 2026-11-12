@@ -1,0 +1,190 @@
+@* Tela principal: menu com todas as operações do Hotel e do Motel. *@
+
+<header class="topo">
+    <h1>Sistema Hotel &amp; Motel</h1>
+    <p>Check-in e check-out sem reserva antecipada.</p>
+</header>
+
+<nav class="menu">
+    @foreach (var item in itensMenu)
+    {
+        <button class="@(tela == item.Tela ? "ativo" : "")" @onclick="() => Abrir(item.Tela)">@item.Titulo</button>
+    }
+</nav>
+
+<main class="conteudo">
+    <section class="cartao">
+        @switch (tela)
+        {
+            case Tela.HotelCheckIn:
+                <h2>Hotel – Check-in</h2>
+                <p class="dica">@hotel.Nome · @hotel.DescricaoCobranca()</p>
+                <label>Nome do cliente <input @bind="nome" placeholder="Ex.: Maria Silva" /></label>
+                <label>CPF <input @bind="cpf" placeholder="Ex.: 123.456.789-00" /></label>
+                <label>Data/hora de entrada <input type="datetime-local" @bind="entrada" /></label>
+                <button class="principal" @onclick="CheckInHotel">Fazer check-in</button>
+                break;
+
+            case Tela.HotelCheckOut:
+                <h2>Hotel – Check-out</h2>
+                <p class="dica">@hotel.Nome · @hotel.DescricaoCobranca()</p>
+                <label>Número do quarto <input type="number" @bind="numeroQuarto" /></label>
+                <label>Data/hora de saída <input type="datetime-local" @bind="saida" /></label>
+                <button class="principal" @onclick="() => CheckOut(hotel)">Fazer check-out</button>
+                break;
+
+            case Tela.MotelCheckIn:
+                <h2>Motel – Check-in</h2>
+                <p class="dica">@motel.Nome · @motel.DescricaoCobranca() · não é preciso identificar o cliente</p>
+                <label>Data/hora de entrada <input type="datetime-local" @bind="entrada" /></label>
+                <button class="principal" @onclick="CheckInMotel">Fazer check-in</button>
+                break;
+
+            case Tela.MotelCheckOut:
+                <h2>Motel – Check-out</h2>
+                <p class="dica">@motel.Nome · @motel.DescricaoCobranca()</p>
+                <label>Número do quarto <input type="number" @bind="numeroQuarto" /></label>
+                <label>Data/hora de saída <input type="datetime-local" @bind="saida" /></label>
+                <button class="principal" @onclick="() => CheckOut(motel)">Fazer check-out</button>
+                break;
+
+            case Tela.Situacao:
+                <h2>Situação dos quartos</h2>
+                <p class="dica">Os quadros abaixo mostram quais quartos estão livres e ocupados.</p>
+                break;
+        }
+
+        @if (mensagem != null)
+        {
+            <div class="mensagem @(erro ? "erro" : "sucesso")">@mensagem</div>
+        }
+    </section>
+
+    @foreach (var est in new Estabelecimento[] { hotel, motel })
+    {
+        <section class="cartao">
+            <h2>@est.Nome</h2>
+            <p class="dica">@est.DescricaoCobranca()</p>
+            <div class="quartos">
+                @foreach (var q in est.Quartos)
+                {
+                    <div class="quarto @(q.Disponivel ? "livre" : "ocupado")">
+                        <strong>@q.Numero</strong>
+                        @if (q.Disponivel)
+                        {
+                            <span>livre</span>
+                        }
+                        else
+                        {
+                            <span>desde @Formato.DataHora(q.EstadiaAtual.Entrada)</span>
+                            @if (q.EstadiaAtual is EstadiaHotel eh)
+                            {
+                                <span>@eh.Cliente.Nome</span>
+                            }
+                        }
+                    </div>
+                }
+            </div>
+        </section>
+    }
+</main>
+
+@code {
+    private enum Tela { HotelCheckIn, HotelCheckOut, MotelCheckIn, MotelCheckOut, Situacao }
+
+    private record ItemMenu(Tela Tela, string Titulo);
+
+    private readonly ItemMenu[] itensMenu =
+    {
+        new(Tela.HotelCheckIn, "Hotel: check-in"),
+        new(Tela.HotelCheckOut, "Hotel: check-out"),
+        new(Tela.MotelCheckIn, "Motel: check-in"),
+        new(Tela.MotelCheckOut, "Motel: check-out"),
+        new(Tela.Situacao, "Situação dos quartos"),
+    };
+
+    private readonly Hotel hotel = new Hotel("Hotel Central", new[] { 101, 102, 103, 104, 105 }, 250m);
+    private readonly Motel motel = new Motel("Motel Estrela", new[] { 1, 2, 3, 4, 5 }, 50m);
+
+    private Tela tela = Tela.HotelCheckIn;
+    private string nome = "";
+    private string cpf = "";
+    private DateTime entrada = Agora();
+    private DateTime saida = Agora();
+    private int? numeroQuarto;
+    private string mensagem;
+    private bool erro;
+
+    private static DateTime Agora()
+    {
+        var a = DateTime.Now;
+        return new DateTime(a.Year, a.Month, a.Day, a.Hour, a.Minute, 0);
+    }
+
+    private void Abrir(Tela nova)
+    {
+        tela = nova;
+        mensagem = null;
+        entrada = Agora();
+        saida = Agora();
+    }
+
+    private void Mostrar(string texto, bool ehErro)
+    {
+        mensagem = texto;
+        erro = ehErro;
+    }
+
+    private void CheckInHotel()
+    {
+        try
+        {
+            var cliente = new Cliente(nome, cpf);
+            int quarto = hotel.CheckIn(cliente, entrada);
+            if (quarto == Estabelecimento.SemQuarto)
+            {
+                Mostrar("Não há quartos disponíveis no " + hotel.Nome + ".", true);
+            }
+            else
+            {
+                Mostrar("Check-in realizado para " + cliente.Nome + ". Quarto: " + quarto, false);
+                nome = "";
+                cpf = "";
+            }
+        }
+        catch (Exception e) when (e is ArgumentException || e is InvalidOperationException)
+        {
+            Mostrar(e.Message, true);
+        }
+    }
+
+    private void CheckInMotel()
+    {
+        int quarto = motel.CheckIn(entrada);
+        if (quarto == Estabelecimento.SemQuarto)
+            Mostrar("Não há quartos disponíveis no " + motel.Nome + ".", true);
+        else
+            Mostrar("Check-in realizado. Quarto: " + quarto, false);
+    }
+
+    /// <summary>Mesmo método para Hotel e Motel: o cálculo do valor é polimórfico.</summary>
+    private void CheckOut(Estabelecimento est)
+    {
+        if (numeroQuarto == null)
+        {
+            Mostrar("Informe o número do quarto.", true);
+            return;
+        }
+        try
+        {
+            decimal valor = est.CheckOut(numeroQuarto.Value, saida);
+            Mostrar("Check-out do quarto " + numeroQuarto + " realizado (" + est.DescricaoCobranca()
+                    + "). Valor a pagar: R$ " + Formato.Dinheiro(valor), false);
+            numeroQuarto = null;
+        }
+        catch (Exception e) when (e is ArgumentException || e is InvalidOperationException)
+        {
+            Mostrar(e.Message, true);
+        }
+    }
+}
