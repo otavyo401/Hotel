@@ -1,0 +1,53 @@
+name: Publicar site (C# Blazor)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Compilar
+        run: dotnet publish csharp/HotelMotel.csproj -c Release -o publish
+
+      - name: Ajustes para GitHub Pages e Hostinger
+        run: |
+          touch publish/wwwroot/.nojekyll
+          printf '%s\n' \
+            'AddType application/wasm .wasm' \
+            'AddType application/octet-stream .dat .blat .dll .pdb' \
+            'AddType application/json .json' > publish/wwwroot/.htaccess
+
+      - name: Pacote para enviar na Hostinger
+        uses: actions/upload-artifact@v4
+        with:
+          name: site-hostinger
+          path: publish/wwwroot
+          include-hidden-files: true
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: publish/wwwroot
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
